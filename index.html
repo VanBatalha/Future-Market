@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <title>TV Ads</title>
+  <meta name="description" content="Tela de propaganda para TV com cache offline e atualização automática." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;background:#000}
+    body{font-family:Arial,Helvetica,sans-serif}
+    .screen{position:relative;width:100vw;height:100vh;background:#000}
+    video,img.poster{width:100%;height:100%;object-fit:cover;background:#000}
+    .poster{display:none}
+    .fallback{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;padding:24px;background:linear-gradient(180deg,rgba(0,0,0,.92),rgba(0,0,0,.82))}
+    .fallback.show{display:flex}
+    .card{width:min(760px,100%);background:rgba(12,12,12,.84);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;text-align:center;color:#fff}
+    .card h1{font-size:clamp(28px,4vw,44px);margin-bottom:12px}
+    .card p{font-size:18px;line-height:1.5;color:rgba(255,255,255,.84);margin-bottom:18px}
+    .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    .btn{min-width:170px;min-height:44px;padding:12px 18px;border-radius:999px;border:0;background:#00b894;color:#fff;font-weight:700;cursor:pointer}
+    .btn.secondary{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12)}
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <video id="adVideo" autoplay muted loop playsinline webkit-playsinline preload="auto" poster="./poster.jpg"></video>
+    <img id="posterImage" class="poster" src="./poster.jpg" alt="Tela de espera" />
+
+    <section class="fallback" id="fallback" aria-live="polite">
+      <div class="card">
+        <h1>Mídia indisponível</h1>
+        <p>Verifique a conexão, o arquivo <strong>config.json</strong> e a mídia principal. Em produção, essa página mantém a mídia em cache para reduzir dependência de internet após a primeira sincronização.</p>
+        <div class="actions">
+          <button class="btn" type="button" id="retryBtn">Tentar novamente</button>
+          <button class="btn secondary" type="button" id="posterBtn">Exibir poster</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const CONFIG_URL = './config.json';
+    const CACHE_NAME = 'tv-ads-media-v1';
+    const video = document.getElementById('adVideo');
+    const posterImage = document.getElementById('posterImage');
+    const fallback = document.getElementById('fallback');
+    const retryBtn = document.getElementById('retryBtn');
+    const posterBtn = document.getElementById('posterBtn');
+    let refreshTimer = null;
+    let currentConfig = null;
+    let currentVideoUrl = '';
+
+    async function fetchJson(url) {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Falha ao carregar ' + url);
+      return response.json();
+    }
+
+    async function cacheFile(url) {
+      const cache = await caches.open(CACHE_NAME);
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Falha ao baixar mídia: ' + url);
+      await cache.put(url, response.clone());
+      return response;
+    }
+
+    async function getCachedOrNetwork(url) {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(url, { ignoreSearch: false });
+      if (cached) return cached;
+      return cacheFile(url);
+    }
+
+    async function blobUrlFromResponse(response) {
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    }
+
+    async function applyMedia(config) {
+      if (currentVideoUrl.startsWith('blob:')) URL.revokeObjectURL(currentVideoUrl);
+      currentConfig = config;
+      const response = await getCachedOrNetwork(config.videoUrl);
+      const blobUrl = await blobUrlFromResponse(response);
+      currentVideoUrl = blobUrl;
+      video.src = blobUrl;
+      video.loop = Boolean(config.loop);
+      video.playbackRate = Number(config.playbackRate || 1);
+      fallback.classList.remove('show');
+      posterImage.style.display = 'none';
+      video.style.display = 'block';
+      await video.play();
+    }
+
+    async function loadInitial() {
+      try {
+        const config = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+        await applyMedia(config);
+        scheduleRefresh(config.refreshMinutes || 15);
+      } catch (error) {
+        fallback.classList.add('show');
+      }
+    }
+
+    function scheduleRefresh(minutes) {
+      clearInterval(refreshTimer);
+      const interval = Math.max(1, Number(minutes || 15)) * 60 * 1000;
+      refreshTimer = setInterval(checkForUpdates, interval);
+    }
+
+    async function checkForUpdates() {
+      try {
+        const freshConfig = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+        const changed = !currentConfig || freshConfig.version !== currentConfig.version || freshConfig.videoUrl !== currentConfig.videoUrl;
+        if (changed) {
+          await cacheFile(freshConfig.videoUrl);
+          await applyMedia(freshConfig);
+        }
+      } catch (error) {}
+    }
+
+    function showPosterOnly() {
+      video.pause();
+      video.style.display = 'none';
+      posterImage.style.display = 'block';
+      fallback.classList.remove('show');
+    }
+
+    retryBtn.addEventListener('click', checkForUpdates);
+    posterBtn.addEventListener('click', showPosterOnly);
+    window.addEventListener('online', checkForUpdates);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdates(); });
+
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+
+    if (location.protocol === 'file:') {
+      video.src = './video.mp4';
+      video.play().catch(() => fallback.classList.add('show'));
+    } else {
+      loadInitial();
+    }
+  </script>
+</body>
+</html>
