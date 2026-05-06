@@ -97,6 +97,7 @@
     async function loadInitial() {
       try {
         const config = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+    	document.title = `${config.clientName} TV Ads`;
         await applyMedia(config);
         scheduleRefresh(config.refreshMinutes || 15);
       } catch (error) {
