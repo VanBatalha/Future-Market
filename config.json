@@ -4,5 +4,5 @@
   "videoUrl": "./video.mp4",
   "loop": true,
   "playbackRate": 1,
-  "refreshMinutes": 5
+  "refreshMinutes": 3
 }
