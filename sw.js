@@ -1,87 +1,89 @@
 /* ═══════════════════════════════════════════════════════════
    Service Worker — Future Market TV Ads
-   • Cache de app + config  →  tv-ads-app-v1
-   • Cache de vídeo         →  tv-ads-media-v1
-   • Range requests para MP4 tratados manualmente para
-     compatibilidade com Smart TVs e navegadores móveis
+
+   O vídeo NÃO é interceptado aqui: a página gerencia o cache
+   de mídia diretamente via Cache API e usa blob URLs, o que
+   elimina qualquer interferência do SW no loop do vídeo.
+
+   Este SW cuida apenas dos assets estáticos do app
+   (HTML, config, manifest, poster, sw.js).
 ═══════════════════════════════════════════════════════════ */
 
-const APP_CACHE   = 'tv-ads-app-v1';
-const MEDIA_CACHE = 'tv-ads-media-v1';
-
+const APP_CACHE = 'tv-ads-app-v1';
 const APP_FILES = [
   './',
   './index.html',
-  './config.json',
   './manifest.webmanifest',
   './poster.jpg',
   './sw.js',
 ];
 
-/* ── Instalação ── */
+/* ── Instalação: pré-cacheia os assets do app ── */
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(APP_CACHE).then(cache => cache.addAll(APP_FILES)).catch(() => {})
+    caches.open(APP_CACHE)
+      .then(cache => cache.addAll(APP_FILES))
+      .catch(() => {})   // não bloqueia instalação se algum asset falhar
   );
 });
 
-/* ── Ativação ── */
+/* ── Ativação: limpa caches de versões antigas do app ── */
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
+    caches.keys()
+      .then(keys => Promise.all(
         keys
-          .filter(k => k !== APP_CACHE && k !== MEDIA_CACHE)
+          .filter(k => k !== APP_CACHE && k !== 'tv-ads-media-v1')
           .map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-/* ── Fetch ── */
+/* ── Fetch: apenas assets do app; vídeos passam direto ── */
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  /* 1. config.json → network-first, fallback para cache */
+  // Vídeos: deixa o browser + Cache API da página gerenciarem
+  if (/\.(mp4|webm|mov)(\?.*)?$/.test(url.pathname)) return;
+
+  // config.json: network-first com fallback para cache
   if (url.pathname.endsWith('/config.json')) {
     event.respondWith(networkFirstConfig(event.request));
     return;
   }
 
-  /* 2. Vídeos (.mp4, .webm, .mov) → cache-first com suporte a range */
-  if (/\.(mp4|webm|mov)(\?.*)?$/.test(url.pathname)) {
-    event.respondWith(videoHandler(event.request));
-    return;
-  }
-
-  /* 3. Demais assets → cache-first, fallback para network */
+  // Demais assets: cache-first com fallback para network
   event.respondWith(cacheFirstAsset(event.request));
 });
 
-/* ═══════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════
    Estratégias
-═══════════════════════════════════════════════════════════ */
+════════════════════════════════════════════════ */
 
 async function networkFirstConfig(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(APP_CACHE);
-      await cache.put('./config.json', response.clone());
+      cache.put('./config.json', response.clone());
     }
     return response;
   } catch {
     const cached = await caches.match('./config.json');
-    return cached || new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    return cached || new Response('{}', {
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
 
 async function cacheFirstAsset(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
+
   try {
     const response = await fetch(request);
     if (response.ok) {
@@ -92,102 +94,4 @@ async function cacheFirstAsset(request) {
   } catch {
     return new Response('Offline', { status: 503 });
   }
-}
-
-/* ── Vídeo: cache + suporte a Range requests ── */
-async function videoHandler(request) {
-  // Mantém o parâmetro ?v= na chave — versões diferentes = entradas separadas no cache
-  const cacheKey = new Request(keepVersionParam(request.url));
-  const cache    = await caches.open(MEDIA_CACHE);
-  const rangeHeader = request.headers.get('range');
-
-  /* Já tem no cache? Serve com suporte a range */
-  const cached = await cache.match(cacheKey);
-  if (cached) {
-    if (rangeHeader) {
-      return sliceResponse(cached, rangeHeader);
-    }
-    return cached;
-  }
-
-  /* Não está em cache: baixa da rede sem Range para obter resposta completa */
-  try {
-    const fullRequest = new Request(request.url, {
-      headers: {},
-      mode: request.mode,
-      credentials: request.credentials,
-    });
-
-    const response = await fetch(fullRequest);
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-
-    /* Cacheia a resposta completa sob a chave com versão */
-    await cache.put(cacheKey, response.clone());
-
-    /* Limpa entradas antigas do mesmo arquivo (outras versões) em segundo plano */
-    pruneOldVersions(cache, request.url).catch(() => {});
-
-    if (rangeHeader) {
-      return sliceResponse(response.clone(), rangeHeader);
-    }
-    return response;
-  } catch {
-    return fetch(request).catch(
-      () => new Response('Vídeo indisponível', { status: 503 })
-    );
-  }
-}
-
-/* Remove entradas antigas do mesmo vídeo (mesmo pathname, ?v= diferente) */
-async function pruneOldVersions(cache, requestUrl) {
-  const newUrl  = new URL(requestUrl);
-  const newV    = newUrl.searchParams.get('v');
-  const keys    = await cache.keys();
-  for (const key of keys) {
-    const keyUrl = new URL(key.url);
-    if (keyUrl.pathname === newUrl.pathname && keyUrl.searchParams.get('v') !== newV) {
-      cache.delete(key);
-    }
-  }
-}
-
-/* ── Fatia uma Response completa para atender um Range request ── */
-async function sliceResponse(response, rangeHeader) {
-  const blob  = await response.blob();
-  const total = blob.size;
-  const type  = response.headers.get('content-type') || 'video/mp4';
-
-  /* Parseia "bytes=start-end" */
-  const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
-  if (!match) return new Response(blob, { status: 200 });
-
-  const start = match[1] !== '' ? parseInt(match[1]) : total - parseInt(match[2]);
-  const end   = match[2] !== '' ? Math.min(parseInt(match[2]), total - 1) : total - 1;
-
-  if (start > end || start >= total) {
-    return new Response(null, {
-      status: 416,
-      headers: { 'Content-Range': `bytes */${total}` },
-    });
-  }
-
-  const sliced = blob.slice(start, end + 1, type);
-
-  return new Response(sliced, {
-    status: 206,
-    headers: {
-      'Content-Type':   type,
-      'Content-Length': String(sliced.size),
-      'Content-Range':  `bytes ${start}-${end}/${total}`,
-      'Accept-Ranges':  'bytes',
-    },
-  });
-}
-
-/* Normaliza a URL mantendo apenas o parâmetro ?v= (ignora ?t= e outros cache-busters) */
-function keepVersionParam(url) {
-  const u = new URL(url);
-  const v = u.searchParams.get('v');
-  u.search = v ? '?v=' + v : '';
-  return u.href;
 }

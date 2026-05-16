@@ -12,7 +12,6 @@
     html, body { width: 100%; height: 100%; overflow: hidden; background: #000 }
     body { font-family: Arial, Helvetica, sans-serif }
 
-    /* ── Vídeo principal ── */
     #adVideo {
       display: block;
       width: 100vw;
@@ -21,7 +20,7 @@
       background: #000;
     }
 
-    /* ── Overlay "Toque para iniciar" ── */
+    /* ── Overlay "Pressione para iniciar" ── */
     #startOverlay {
       position: fixed;
       inset: 0;
@@ -30,17 +29,15 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(ellipse at center, rgba(0,40,30,.92) 0%, rgba(0,0,0,.97) 100%);
+      background: radial-gradient(ellipse at center, rgba(0,40,30,.92), rgba(0,0,0,.97));
       cursor: pointer;
       transition: opacity .4s;
     }
-    #startOverlay.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
+    #startOverlay.hidden { opacity: 0; pointer-events: none; }
+
     .play-ring {
-      width: clamp(90px, 15vw, 140px);
-      height: clamp(90px, 15vw, 140px);
+      width: clamp(90px,15vw,140px);
+      height: clamp(90px,15vw,140px);
       border-radius: 50%;
       border: 3px solid rgba(0,184,148,.6);
       display: flex;
@@ -49,8 +46,8 @@
       animation: pulse 2s ease-in-out infinite;
     }
     .play-btn {
-      width: clamp(70px, 12vw, 110px);
-      height: clamp(70px, 12vw, 110px);
+      width: clamp(70px,12vw,110px);
+      height: clamp(70px,12vw,110px);
       border-radius: 50%;
       background: #00b894;
       border: none;
@@ -59,11 +56,9 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 0 40px rgba(0,184,148,.5);
-      flex-shrink: 0;
     }
     .play-btn::after {
       content: '';
-      display: block;
       border-style: solid;
       border-width: clamp(12px,2vw,20px) 0 clamp(12px,2vw,20px) clamp(22px,3.5vw,36px);
       border-color: transparent transparent transparent #fff;
@@ -71,14 +66,31 @@
     }
     #startLabel {
       color: rgba(255,255,255,.75);
-      font-size: clamp(16px, 2.5vw, 24px);
+      font-size: clamp(16px,2.5vw,24px);
       margin-top: 28px;
       letter-spacing: .05em;
     }
     @keyframes pulse {
-      0%, 100% { transform: scale(1);   opacity: .7; }
-      50%       { transform: scale(1.1); opacity: 1;  }
+      0%,100% { transform: scale(1);   opacity: .7; }
+      50%      { transform: scale(1.1); opacity: 1;  }
     }
+
+    /* ── Badge discreto: novo vídeo baixado ── */
+    #updateBadge {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+      background: rgba(0,184,148,.9);
+      color: #fff;
+      font-size: 14px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      opacity: 0;
+      transition: opacity .5s;
+      pointer-events: none;
+    }
+    #updateBadge.show { opacity: 1; }
 
     /* ── Tela de erro ── */
     #fallback {
@@ -89,52 +101,33 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
-      background: linear-gradient(180deg, rgba(0,0,0,.95), rgba(0,0,0,.88));
+      background: rgba(0,0,0,.95);
     }
     #fallback.show { display: flex; }
     .card {
-      width: min(720px, 100%);
-      background: rgba(12,12,12,.88);
+      width: min(720px,100%);
+      background: rgba(12,12,12,.9);
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 22px;
       padding: clamp(20px,4vw,36px);
       text-align: center;
       color: #fff;
     }
-    .card h1 { font-size: clamp(24px, 4vw, 40px); margin-bottom: 14px }
-    .card p  { font-size: clamp(15px, 2vw, 19px); line-height: 1.55; color: rgba(255,255,255,.8); margin-bottom: 22px }
+    .card h1 { font-size: clamp(24px,4vw,40px); margin-bottom: 14px }
+    .card p  { font-size: clamp(15px,2vw,19px); line-height: 1.55; color: rgba(255,255,255,.8); margin-bottom: 22px }
     .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap }
     .btn {
-      min-width: 160px;
-      min-height: 48px;
-      padding: 12px 24px;
-      border-radius: 999px;
-      border: 0;
-      background: #00b894;
-      color: #fff;
-      font-weight: 700;
-      font-size: 16px;
-      cursor: pointer;
+      min-width: 160px; min-height: 48px;
+      padding: 12px 24px; border-radius: 999px; border: 0;
+      background: #00b894; color: #fff; font-weight: 700; font-size: 16px; cursor: pointer;
     }
-    .btn.secondary {
-      background: rgba(255,255,255,.1);
-      border: 1px solid rgba(255,255,255,.18);
-    }
+    .btn.secondary { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); }
   </style>
 </head>
 <body>
 
-  <!-- Vídeo principal (sem muted — áudio ativo) -->
-  <video
-    id="adVideo"
-    playsinline
-    webkit-playsinline
-    x5-playsinline
-    preload="auto"
-    poster="./poster.jpg"
-  ></video>
+  <video id="adVideo" playsinline webkit-playsinline x5-playsinline preload="auto" poster="./poster.jpg"></video>
 
-  <!-- Overlay de início (obrigatório para autoplay com áudio) -->
   <div id="startOverlay" role="button" tabindex="0" aria-label="Iniciar reprodução">
     <div class="play-ring">
       <button class="play-btn" type="button" aria-label="Play"></button>
@@ -142,14 +135,12 @@
     <p id="startLabel">Pressione para iniciar</p>
   </div>
 
-  <!-- Tela de erro -->
+  <div id="updateBadge">Novo vídeo pronto — troca ao final…</div>
+
   <section id="fallback" aria-live="polite">
     <div class="card">
       <h1>Mídia indisponível</h1>
-      <p>
-        Verifique a conexão, o arquivo <strong>config.json</strong> e o vídeo principal.
-        Após a primeira reprodução, o conteúdo fica em cache para uso offline.
-      </p>
+      <p>Verifique a conexão e o arquivo <strong>config.json</strong>. Após a primeira reprodução o conteúdo fica em cache para uso offline.</p>
       <div class="actions">
         <button class="btn"           type="button" id="retryBtn">Tentar novamente</button>
         <button class="btn secondary" type="button" id="reloadBtn">Recarregar página</button>
@@ -158,135 +149,193 @@
   </section>
 
   <script>
-    /* ═══════════════════════════════════════════
-       Configuração
-    ═══════════════════════════════════════════ */
+    /* ════════════════════════════════════════════════
+       Estado global
+    ════════════════════════════════════════════════ */
     const CONFIG_URL  = './config.json';
     const MEDIA_CACHE = 'tv-ads-media-v1';
 
     const video       = document.getElementById('adVideo');
     const overlay     = document.getElementById('startOverlay');
     const fallback    = document.getElementById('fallback');
+    const badge       = document.getElementById('updateBadge');
 
-    let currentConfig  = null;
-    let refreshTimer   = null;
+    let currentConfig   = null;   // config em exibição agora
+    let currentBlobUrl  = null;   // blob URL do vídeo em exibição
+    let pendingConfig   = null;   // nova config aguardando troca
+    let pendingBlobUrl  = null;   // blob URL do novo vídeo (já baixado)
+    let refreshTimer    = null;
     let playbackStarted = false;
 
-    /* ═══════════════════════════════════════════
-       Fullscreen helpers
-    ═══════════════════════════════════════════ */
+    /* ════════════════════════════════════════════════
+       Fullscreen
+    ════════════════════════════════════════════════ */
     function enterFullscreen() {
       const el = document.documentElement;
-      const fn = el.requestFullscreen
-              || el.webkitRequestFullscreen
-              || el.mozRequestFullScreen
-              || el.msRequestFullscreen;
+      const fn = el.requestFullscreen || el.webkitRequestFullscreen
+              || el.mozRequestFullScreen || el.msRequestFullscreen;
       if (fn) fn.call(el).catch(() => {});
     }
 
-    // Tenta reentrar em fullscreen se o usuário sair (em TVs isso raramente ocorre)
-    document.addEventListener('fullscreenchange',       onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    function onFsChange() {
-      const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-      if (!inFs && playbackStarted) {
-        setTimeout(enterFullscreen, 800);
-      }
-    }
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev =>
+      document.addEventListener(ev, () => {
+        const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        if (!inFs && playbackStarted) setTimeout(enterFullscreen, 800);
+      })
+    );
 
-    /* ═══════════════════════════════════════════
+    /* ════════════════════════════════════════════════
        Iniciar reprodução (requer gesto do usuário)
-    ═══════════════════════════════════════════ */
+    ════════════════════════════════════════════════ */
     async function startPlayback() {
       if (playbackStarted) return;
       playbackStarted = true;
       overlay.classList.add('hidden');
-
       enterFullscreen();
 
-      video.muted = false;        // áudio ativo
+      video.muted  = false;
       video.volume = 1;
-
       try {
         await video.play();
-      } catch (err) {
-        // Alguns browsers ainda bloqueiam; tenta mudo como fallback
-        console.warn('Autoplay com áudio bloqueado, tentando mudo:', err);
+      } catch {
+        // Alguns browsers ainda bloqueiam mesmo com gesto — tenta mudo como fallback
         video.muted = true;
-        try { await video.play(); } catch { showFallback(); }
+        video.play().catch(() => showFallback());
       }
     }
 
-    // Clique / toque no overlay
     overlay.addEventListener('click', startPlayback);
-
-    // Teclas do controle remoto de Smart TV (OK, Enter, Space, seta direita)
     document.addEventListener('keydown', e => {
-      const actionKeys = ['Enter', ' ', 'ArrowRight', 'MediaPlay', 'MediaPlayPause'];
-      if (actionKeys.includes(e.key)) {
+      if (['Enter', ' ', 'ArrowRight', 'MediaPlay', 'MediaPlayPause'].includes(e.key)) {
         e.preventDefault();
         startPlayback();
       }
     });
 
-    /* ═══════════════════════════════════════════
-       Carregar / aplicar mídia
-    ═══════════════════════════════════════════ */
+    /* ════════════════════════════════════════════════
+       Gerenciamento de cache de vídeo
+
+       Usamos blob URLs em vez de apontar o <video> para
+       a URL real. Assim o browser lê de memória/blob e
+       o loop NUNCA faz requisição de rede — sem SW no meio.
+    ════════════════════════════════════════════════ */
+
+    /** Chave de cache única por (videoUrl + version) */
+    function cacheKey(config) {
+      return config.videoUrl + '#v=' + config.version;
+    }
+
+    /** Baixa o vídeo (ou usa cache) e devolve um blob URL */
+    async function fetchVideoBlob(config) {
+      const cache = await caches.open(MEDIA_CACHE);
+      const key   = cacheKey(config);
+
+      let response = await cache.match(key);
+      if (!response) {
+        response = await fetch(config.videoUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        // Armazena no cache para uso offline futuro
+        await cache.put(key, response.clone());
+      }
+
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    }
+
+    /** Remove a entrada de um config do cache de mídia */
+    async function evictFromCache(config) {
+      try {
+        const cache = await caches.open(MEDIA_CACHE);
+        await cache.delete(cacheKey(config));
+      } catch {}
+    }
+
+    /* ════════════════════════════════════════════════
+       Aplicar vídeo ao elemento
+    ════════════════════════════════════════════════ */
+    function applyVideo(config, blobUrl) {
+      // Libera blob anterior da memória
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+
+      currentConfig  = config;
+      currentBlobUrl = blobUrl;
+
+      // loop=false porque controlamos manualmente via 'ended'
+      // (isso garante que a troca aconteça no fim do vídeo)
+      video.src          = blobUrl;
+      video.loop         = false;
+      video.playbackRate = Number(config.playbackRate) || 1;
+      video.load();
+    }
+
+    /* ════════════════════════════════════════════════
+       Loop manual + troca de vídeo ao fim
+    ════════════════════════════════════════════════ */
+    video.addEventListener('ended', () => {
+      if (pendingBlobUrl && pendingConfig) {
+        // ── Novo vídeo pronto: troca aqui ──────────────
+        const oldConfig = currentConfig;
+
+        applyVideo(pendingConfig, pendingBlobUrl);
+        pendingConfig  = null;
+        pendingBlobUrl = null;
+        badge.classList.remove('show');
+
+        video.play().catch(() => {});
+
+        // Apaga o vídeo antigo do cache após a troca
+        evictFromCache(oldConfig);
+
+      } else {
+        // ── Mesmo vídeo: loop ───────────────────────────
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }
+    });
+
+    /* ════════════════════════════════════════════════
+       Carregamento inicial
+    ════════════════════════════════════════════════ */
     async function fetchJson(url) {
       const r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }
 
-    function applyConfig(config) {
-      document.title = (config.clientName || 'TV') + ' Ads';
-
-      // Detecta mudança de vídeo comparando os campos do config — não a src do elemento
-      // (video.src retorna URL absoluta, impossível comparar com string relativa)
-      const videoChanged = !currentConfig
-        || config.videoUrl !== currentConfig.videoUrl
-        || config.version  !== currentConfig.version;
-
-      currentConfig = config;
-
-      // Propriedades que funcionam mesmo sem trocar a src
-      video.loop         = config.loop !== false;
-      video.playbackRate = Number(config.playbackRate) || 1;
-
-      if (videoChanged) {
-        const wasPlaying = playbackStarted && !video.paused;
-        // ?v= na URL força o SW a cachear a nova versão separadamente
-        video.src = config.videoUrl + '?v=' + (config.version || '1');
-        video.load();
-        // Reaplicar após load (alguns browsers resetam esses valores)
-        video.loop         = config.loop !== false;
-        video.playbackRate = Number(config.playbackRate) || 1;
-        if (wasPlaying) video.play().catch(() => {});
-      }
-    }
-
-    async function loadConfig() {
+    async function loadInitial() {
       try {
         const config = await fetchJson(CONFIG_URL + '?t=' + Date.now());
-        applyConfig(config);
+        document.title = (config.clientName || 'TV') + ' Ads';
+
+        const blobUrl = await fetchVideoBlob(config);
+        applyVideo(config, blobUrl);
+        // O play() só acontece quando o usuário pressionar o overlay
         scheduleRefresh(config.refreshMinutes || 15);
+
       } catch {
-        // Tenta o cache do SW
+        // Tenta config salvo pelo SW
         try {
-          const cache  = await caches.open('tv-ads-app-v1');
-          const cached = await cache.match('./config.json');
+          const swCache = await caches.open('tv-ads-app-v1');
+          const cached  = await swCache.match('./config.json');
           if (cached) {
-            const config = await cached.json();
-            applyConfig(config);
+            const config  = await cached.json();
+            document.title = (config.clientName || 'TV') + ' Ads';
+            const blobUrl  = await fetchVideoBlob(config);
+            applyVideo(config, blobUrl);
             scheduleRefresh(config.refreshMinutes || 15);
             return;
           }
         } catch {}
-        // Último recurso: aponta direto para o vídeo
-        video.src = './video.mp4';
+
+        // Último recurso: aponta direto (sem cache gerenciado)
+        video.src  = './video.mp4';
+        video.loop = true;
       }
     }
 
+    /* ════════════════════════════════════════════════
+       Verificação periódica de atualizações
+    ════════════════════════════════════════════════ */
     function scheduleRefresh(minutes) {
       clearInterval(refreshTimer);
       refreshTimer = setInterval(checkForUpdates, Math.max(1, Number(minutes)) * 60_000);
@@ -294,50 +343,51 @@
 
     async function checkForUpdates() {
       try {
-        const fresh   = await fetchJson(CONFIG_URL + '?t=' + Date.now());
-        const changed = !currentConfig
-                     || fresh.version  !== currentConfig.version
-                     || fresh.videoUrl !== currentConfig.videoUrl;
-        if (changed) applyConfig(fresh);
+        const fresh = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+
+        // Sem mudança
+        if (currentConfig
+          && fresh.version  === currentConfig.version
+          && fresh.videoUrl === currentConfig.videoUrl) return;
+
+        // Já baixando esta versão
+        if (pendingConfig
+          && fresh.version  === pendingConfig.version
+          && fresh.videoUrl === pendingConfig.videoUrl) return;
+
+        // Nova versão detectada → baixa em background enquanto o atual continua
+        pendingConfig  = fresh;
+        pendingBlobUrl = null;
+
+        const blobUrl = await fetchVideoBlob(fresh);
+
+        // Confirma que ainda é a versão mais recente (pode ter mudado durante o download)
+        if (pendingConfig
+          && fresh.version  === pendingConfig.version
+          && fresh.videoUrl === pendingConfig.videoUrl) {
+          pendingBlobUrl = blobUrl;
+          badge.classList.add('show');   // avisa discretamente
+        } else {
+          URL.revokeObjectURL(blobUrl);  // versão obsoleta, descarta
+        }
+
       } catch {}
     }
 
-    /* ═══════════════════════════════════════════
-       Erros de vídeo
-    ═══════════════════════════════════════════ */
-    function showFallback() {
-      fallback.classList.add('show');
-    }
+    /* ════════════════════════════════════════════════
+       Erros e botões de recuperação
+    ════════════════════════════════════════════════ */
+    function showFallback() { fallback.classList.add('show'); }
 
     video.addEventListener('error', () => {
       if (playbackStarted) showFallback();
     });
 
-    // Loop manual — mais confiável que video.loop sozinho quando o SW intercepta
-    // os range requests de recomeço (bytes=0-) e pode falhar silenciosamente
-    video.addEventListener('ended', () => {
-      if (!currentConfig || currentConfig.loop !== false) {
-        video.currentTime = 0;
-        video.play().catch(() => {});
-      }
-    });
-
-    // Recupera se o vídeo travar (stall) por mais de 8 s
-    let stallTimer = null;
-    video.addEventListener('waiting', () => {
-      stallTimer = setTimeout(() => {
-        if (video.paused) video.play().catch(() => {});
-      }, 8000);
-    });
-    video.addEventListener('playing', () => clearTimeout(stallTimer));
-
     document.getElementById('retryBtn').addEventListener('click', async () => {
       fallback.classList.remove('show');
-      await checkForUpdates();
-      video.load();
+      await loadInitial();
       if (playbackStarted) video.play().catch(() => {});
     });
-
     document.getElementById('reloadBtn').addEventListener('click', () => location.reload());
 
     window.addEventListener('online', checkForUpdates);
@@ -345,21 +395,19 @@
       if (!document.hidden) checkForUpdates();
     });
 
-    /* ═══════════════════════════════════════════
-       Service Worker
-    ═══════════════════════════════════════════ */
+    /* ════════════════════════════════════════════════
+       Service Worker + Bootstrap
+    ════════════════════════════════════════════════ */
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
 
-    /* ═══════════════════════════════════════════
-       Bootstrap
-    ═══════════════════════════════════════════ */
     if (location.protocol === 'file:') {
       // Teste local sem servidor
-      video.src = './video.mp4';
+      video.src  = './video.mp4';
+      video.loop = true;
     } else {
-      loadConfig();
+      loadInitial();
     }
   </script>
 </body>
