@@ -1,8 +1,8 @@
 {
   "clientName": "Future-Market",
   "version": "2026-05-06-001",
-  "videoUrl": "./video.mp4",
+  "videoUrl": "./video-teste.mp4",
   "loop": true,
   "playbackRate": 1,
-  "refreshMinutes": 3
+  "refreshMinutes": 2
 }
