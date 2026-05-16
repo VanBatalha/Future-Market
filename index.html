@@ -8,141 +8,329 @@
   <meta name="description" content="Tela de propaganda para TV com cache offline e atualização automática." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    html,body{width:100%;height:100%;overflow:hidden;background:#000}
-    body{font-family:Arial,Helvetica,sans-serif}
-    .screen{position:relative;width:100vw;height:100vh;background:#000}
-    video,img.poster{width:100%;height:100%;object-fit:cover;background:#000}
-    .poster{display:none}
-    .fallback{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;padding:24px;background:linear-gradient(180deg,rgba(0,0,0,.92),rgba(0,0,0,.82))}
-    .fallback.show{display:flex}
-    .card{width:min(760px,100%);background:rgba(12,12,12,.84);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:28px;text-align:center;color:#fff}
-    .card h1{font-size:clamp(28px,4vw,44px);margin-bottom:12px}
-    .card p{font-size:18px;line-height:1.5;color:rgba(255,255,255,.84);margin-bottom:18px}
-    .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-    .btn{min-width:170px;min-height:44px;padding:12px 18px;border-radius:999px;border:0;background:#00b894;color:#fff;font-weight:700;cursor:pointer}
-    .btn.secondary{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12)}
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000 }
+    body { font-family: Arial, Helvetica, sans-serif }
+
+    /* ── Vídeo principal ── */
+    #adVideo {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      background: #000;
+    }
+
+    /* ── Overlay "Toque para iniciar" ── */
+    #startOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(0,40,30,.92) 0%, rgba(0,0,0,.97) 100%);
+      cursor: pointer;
+      transition: opacity .4s;
+    }
+    #startOverlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .play-ring {
+      width: clamp(90px, 15vw, 140px);
+      height: clamp(90px, 15vw, 140px);
+      border-radius: 50%;
+      border: 3px solid rgba(0,184,148,.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .play-btn {
+      width: clamp(70px, 12vw, 110px);
+      height: clamp(70px, 12vw, 110px);
+      border-radius: 50%;
+      background: #00b894;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 40px rgba(0,184,148,.5);
+      flex-shrink: 0;
+    }
+    .play-btn::after {
+      content: '';
+      display: block;
+      border-style: solid;
+      border-width: clamp(12px,2vw,20px) 0 clamp(12px,2vw,20px) clamp(22px,3.5vw,36px);
+      border-color: transparent transparent transparent #fff;
+      margin-left: clamp(5px,1vw,10px);
+    }
+    #startLabel {
+      color: rgba(255,255,255,.75);
+      font-size: clamp(16px, 2.5vw, 24px);
+      margin-top: 28px;
+      letter-spacing: .05em;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1);   opacity: .7; }
+      50%       { transform: scale(1.1); opacity: 1;  }
+    }
+
+    /* ── Tela de erro ── */
+    #fallback {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(0,0,0,.95), rgba(0,0,0,.88));
+    }
+    #fallback.show { display: flex; }
+    .card {
+      width: min(720px, 100%);
+      background: rgba(12,12,12,.88);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 22px;
+      padding: clamp(20px,4vw,36px);
+      text-align: center;
+      color: #fff;
+    }
+    .card h1 { font-size: clamp(24px, 4vw, 40px); margin-bottom: 14px }
+    .card p  { font-size: clamp(15px, 2vw, 19px); line-height: 1.55; color: rgba(255,255,255,.8); margin-bottom: 22px }
+    .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap }
+    .btn {
+      min-width: 160px;
+      min-height: 48px;
+      padding: 12px 24px;
+      border-radius: 999px;
+      border: 0;
+      background: #00b894;
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .btn.secondary {
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.18);
+    }
   </style>
 </head>
 <body>
-  <main class="screen">
-    <video id="adVideo" autoplay muted loop playsinline webkit-playsinline preload="auto" poster="./poster.jpg"></video>
-    <img id="posterImage" class="poster" src="./poster.jpg" alt="Tela de espera" />
 
-    <section class="fallback" id="fallback" aria-live="polite">
-      <div class="card">
-        <h1>Mídia indisponível</h1>
-        <p>Verifique a conexão, o arquivo <strong>config.json</strong> e a mídia principal. Em produção, essa página mantém a mídia em cache para reduzir dependência de internet após a primeira sincronização.</p>
-        <div class="actions">
-          <button class="btn" type="button" id="retryBtn">Tentar novamente</button>
-          <button class="btn secondary" type="button" id="posterBtn">Exibir poster</button>
-        </div>
+  <!-- Vídeo principal (sem muted — áudio ativo) -->
+  <video
+    id="adVideo"
+    playsinline
+    webkit-playsinline
+    x5-playsinline
+    preload="auto"
+    poster="./poster.jpg"
+  ></video>
+
+  <!-- Overlay de início (obrigatório para autoplay com áudio) -->
+  <div id="startOverlay" role="button" tabindex="0" aria-label="Iniciar reprodução">
+    <div class="play-ring">
+      <button class="play-btn" type="button" aria-label="Play"></button>
+    </div>
+    <p id="startLabel">Pressione para iniciar</p>
+  </div>
+
+  <!-- Tela de erro -->
+  <section id="fallback" aria-live="polite">
+    <div class="card">
+      <h1>Mídia indisponível</h1>
+      <p>
+        Verifique a conexão, o arquivo <strong>config.json</strong> e o vídeo principal.
+        Após a primeira reprodução, o conteúdo fica em cache para uso offline.
+      </p>
+      <div class="actions">
+        <button class="btn"           type="button" id="retryBtn">Tentar novamente</button>
+        <button class="btn secondary" type="button" id="reloadBtn">Recarregar página</button>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 
   <script>
-    const CONFIG_URL = './config.json';
-    const CACHE_NAME = 'tv-ads-media-v1';
-    const video = document.getElementById('adVideo');
-    const posterImage = document.getElementById('posterImage');
-    const fallback = document.getElementById('fallback');
-    const retryBtn = document.getElementById('retryBtn');
-    const posterBtn = document.getElementById('posterBtn');
-    let refreshTimer = null;
-    let currentConfig = null;
-    let currentVideoUrl = '';
+    /* ═══════════════════════════════════════════
+       Configuração
+    ═══════════════════════════════════════════ */
+    const CONFIG_URL  = './config.json';
+    const MEDIA_CACHE = 'tv-ads-media-v1';
 
+    const video       = document.getElementById('adVideo');
+    const overlay     = document.getElementById('startOverlay');
+    const fallback    = document.getElementById('fallback');
+
+    let currentConfig  = null;
+    let refreshTimer   = null;
+    let playbackStarted = false;
+
+    /* ═══════════════════════════════════════════
+       Fullscreen helpers
+    ═══════════════════════════════════════════ */
+    function enterFullscreen() {
+      const el = document.documentElement;
+      const fn = el.requestFullscreen
+              || el.webkitRequestFullscreen
+              || el.mozRequestFullScreen
+              || el.msRequestFullscreen;
+      if (fn) fn.call(el).catch(() => {});
+    }
+
+    // Tenta reentrar em fullscreen se o usuário sair (em TVs isso raramente ocorre)
+    document.addEventListener('fullscreenchange',       onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    function onFsChange() {
+      const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      if (!inFs && playbackStarted) {
+        setTimeout(enterFullscreen, 800);
+      }
+    }
+
+    /* ═══════════════════════════════════════════
+       Iniciar reprodução (requer gesto do usuário)
+    ═══════════════════════════════════════════ */
+    async function startPlayback() {
+      if (playbackStarted) return;
+      playbackStarted = true;
+      overlay.classList.add('hidden');
+
+      enterFullscreen();
+
+      video.muted = false;        // áudio ativo
+      video.volume = 1;
+
+      try {
+        await video.play();
+      } catch (err) {
+        // Alguns browsers ainda bloqueiam; tenta mudo como fallback
+        console.warn('Autoplay com áudio bloqueado, tentando mudo:', err);
+        video.muted = true;
+        try { await video.play(); } catch { showFallback(); }
+      }
+    }
+
+    // Clique / toque no overlay
+    overlay.addEventListener('click', startPlayback);
+
+    // Teclas do controle remoto de Smart TV (OK, Enter, Space, seta direita)
+    document.addEventListener('keydown', e => {
+      const actionKeys = ['Enter', ' ', 'ArrowRight', 'MediaPlay', 'MediaPlayPause'];
+      if (actionKeys.includes(e.key)) {
+        e.preventDefault();
+        startPlayback();
+      }
+    });
+
+    /* ═══════════════════════════════════════════
+       Carregar / aplicar mídia
+    ═══════════════════════════════════════════ */
     async function fetchJson(url) {
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) throw new Error('Falha ao carregar ' + url);
-      return response.json();
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
     }
 
-    async function cacheFile(url) {
-      const cache = await caches.open(CACHE_NAME);
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) throw new Error('Falha ao baixar mídia: ' + url);
-      await cache.put(url, response.clone());
-      return response;
+    function applyConfig(config) {
+      currentConfig    = config;
+      document.title   = (config.clientName || 'TV') + ' Ads';
+      video.loop        = config.loop !== false;
+      video.playbackRate = Number(config.playbackRate) || 1;
+
+      // Troca a src só se mudar (evita reiniciar desnecessariamente)
+      const newSrc = config.videoUrl + '?v=' + (config.version || '1');
+      if (!video.src.endsWith(newSrc)) {
+        const wasPlaying = !video.paused;
+        video.src = newSrc;
+        video.load();
+        if (wasPlaying) video.play().catch(() => {});
+      }
     }
 
-    async function getCachedOrNetwork(url) {
-      const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(url, { ignoreSearch: false });
-      if (cached) return cached;
-      return cacheFile(url);
-    }
-
-    async function blobUrlFromResponse(response) {
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    }
-
-    async function applyMedia(config) {
-      if (currentVideoUrl.startsWith('blob:')) URL.revokeObjectURL(currentVideoUrl);
-      currentConfig = config;
-      const response = await getCachedOrNetwork(config.videoUrl);
-      const blobUrl = await blobUrlFromResponse(response);
-      currentVideoUrl = blobUrl;
-      video.src = blobUrl;
-      video.loop = Boolean(config.loop);
-      video.playbackRate = Number(config.playbackRate || 1);
-      fallback.classList.remove('show');
-      posterImage.style.display = 'none';
-      video.style.display = 'block';
-      await video.play();
-    }
-
-    async function loadInitial() {
+    async function loadConfig() {
       try {
         const config = await fetchJson(CONFIG_URL + '?t=' + Date.now());
-    	document.title = `${config.clientName} TV Ads`;
-        await applyMedia(config);
+        applyConfig(config);
         scheduleRefresh(config.refreshMinutes || 15);
-      } catch (error) {
-        fallback.classList.add('show');
+      } catch {
+        // Tenta o cache do SW
+        try {
+          const cache  = await caches.open('tv-ads-app-v1');
+          const cached = await cache.match('./config.json');
+          if (cached) {
+            const config = await cached.json();
+            applyConfig(config);
+            scheduleRefresh(config.refreshMinutes || 15);
+            return;
+          }
+        } catch {}
+        // Último recurso: aponta direto para o vídeo
+        video.src = './video.mp4';
       }
     }
 
     function scheduleRefresh(minutes) {
       clearInterval(refreshTimer);
-      const interval = Math.max(1, Number(minutes || 15)) * 60 * 1000;
-      refreshTimer = setInterval(checkForUpdates, interval);
+      refreshTimer = setInterval(checkForUpdates, Math.max(1, Number(minutes)) * 60_000);
     }
 
     async function checkForUpdates() {
       try {
-        const freshConfig = await fetchJson(CONFIG_URL + '?t=' + Date.now());
-        const changed = !currentConfig || freshConfig.version !== currentConfig.version || freshConfig.videoUrl !== currentConfig.videoUrl;
-        if (changed) {
-          await cacheFile(freshConfig.videoUrl);
-          await applyMedia(freshConfig);
-        }
-      } catch (error) {}
+        const fresh   = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+        const changed = !currentConfig
+                     || fresh.version  !== currentConfig.version
+                     || fresh.videoUrl !== currentConfig.videoUrl;
+        if (changed) applyConfig(fresh);
+      } catch {}
     }
 
-    function showPosterOnly() {
-      video.pause();
-      video.style.display = 'none';
-      posterImage.style.display = 'block';
+    /* ═══════════════════════════════════════════
+       Erros de vídeo
+    ═══════════════════════════════════════════ */
+    function showFallback() {
+      fallback.classList.add('show');
+    }
+
+    video.addEventListener('error', () => {
+      if (playbackStarted) showFallback();
+    });
+
+    document.getElementById('retryBtn').addEventListener('click', async () => {
       fallback.classList.remove('show');
-    }
+      await checkForUpdates();
+      video.load();
+      if (playbackStarted) video.play().catch(() => {});
+    });
 
-    retryBtn.addEventListener('click', checkForUpdates);
-    posterBtn.addEventListener('click', showPosterOnly);
+    document.getElementById('reloadBtn').addEventListener('click', () => location.reload());
+
     window.addEventListener('online', checkForUpdates);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdates(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkForUpdates();
+    });
 
+    /* ═══════════════════════════════════════════
+       Service Worker
+    ═══════════════════════════════════════════ */
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
 
+    /* ═══════════════════════════════════════════
+       Bootstrap
+    ═══════════════════════════════════════════ */
     if (location.protocol === 'file:') {
+      // Teste local sem servidor
       video.src = './video.mp4';
-      video.play().catch(() => fallback.classList.add('show'));
     } else {
-      loadInitial();
+      loadConfig();
     }
   </script>
 </body>
