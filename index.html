@@ -313,6 +313,24 @@
       if (playbackStarted) showFallback();
     });
 
+    // Loop manual — mais confiável que video.loop sozinho quando o SW intercepta
+    // os range requests de recomeço (bytes=0-) e pode falhar silenciosamente
+    video.addEventListener('ended', () => {
+      if (!currentConfig || currentConfig.loop !== false) {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      }
+    });
+
+    // Recupera se o vídeo travar (stall) por mais de 8 s
+    let stallTimer = null;
+    video.addEventListener('waiting', () => {
+      stallTimer = setTimeout(() => {
+        if (video.paused) video.play().catch(() => {});
+      }, 8000);
+    });
+    video.addEventListener('playing', () => clearTimeout(stallTimer));
+
     document.getElementById('retryBtn').addEventListener('click', async () => {
       fallback.classList.remove('show');
       await checkForUpdates();
