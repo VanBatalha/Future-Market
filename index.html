@@ -239,17 +239,28 @@
     }
 
     function applyConfig(config) {
-      currentConfig    = config;
-      document.title   = (config.clientName || 'TV') + ' Ads';
-      video.loop        = config.loop !== false;
+      document.title = (config.clientName || 'TV') + ' Ads';
+
+      // Detecta mudança de vídeo comparando os campos do config — não a src do elemento
+      // (video.src retorna URL absoluta, impossível comparar com string relativa)
+      const videoChanged = !currentConfig
+        || config.videoUrl !== currentConfig.videoUrl
+        || config.version  !== currentConfig.version;
+
+      currentConfig = config;
+
+      // Propriedades que funcionam mesmo sem trocar a src
+      video.loop         = config.loop !== false;
       video.playbackRate = Number(config.playbackRate) || 1;
 
-      // Troca a src só se mudar (evita reiniciar desnecessariamente)
-      const newSrc = config.videoUrl + '?v=' + (config.version || '1');
-      if (!video.src.endsWith(newSrc)) {
-        const wasPlaying = !video.paused;
-        video.src = newSrc;
+      if (videoChanged) {
+        const wasPlaying = playbackStarted && !video.paused;
+        // ?v= na URL força o SW a cachear a nova versão separadamente
+        video.src = config.videoUrl + '?v=' + (config.version || '1');
         video.load();
+        // Reaplicar após load (alguns browsers resetam esses valores)
+        video.loop         = config.loop !== false;
+        video.playbackRate = Number(config.playbackRate) || 1;
         if (wasPlaying) video.play().catch(() => {});
       }
     }

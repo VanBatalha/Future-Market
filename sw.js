@@ -96,7 +96,8 @@ async function cacheFirstAsset(request) {
 
 /* ── Vídeo: cache + suporte a Range requests ── */
 async function videoHandler(request) {
-  const cacheKey = new Request(stripQuery(request.url)); // chave sem ?v=...
+  // Mantém o parâmetro ?v= na chave — versões diferentes = entradas separadas no cache
+  const cacheKey = new Request(keepVersionParam(request.url));
   const cache    = await caches.open(MEDIA_CACHE);
   const rangeHeader = request.headers.get('range');
 
@@ -109,11 +110,10 @@ async function videoHandler(request) {
     return cached;
   }
 
-  /* Não está em cache: baixa da rede */
+  /* Não está em cache: baixa da rede sem Range para obter resposta completa */
   try {
-    // Primeiro tenta sem range para obter o arquivo completo e cachear
     const fullRequest = new Request(request.url, {
-      headers: {},         // sem Range → resposta 200 completa
+      headers: {},
       mode: request.mode,
       credentials: request.credentials,
     });
@@ -121,19 +121,33 @@ async function videoHandler(request) {
     const response = await fetch(fullRequest);
     if (!response.ok) throw new Error('HTTP ' + response.status);
 
-    /* Cacheia a resposta completa */
+    /* Cacheia a resposta completa sob a chave com versão */
     await cache.put(cacheKey, response.clone());
 
-    /* Devolve slice se o browser pediu um range */
+    /* Limpa entradas antigas do mesmo arquivo (outras versões) em segundo plano */
+    pruneOldVersions(cache, request.url).catch(() => {});
+
     if (rangeHeader) {
       return sliceResponse(response.clone(), rangeHeader);
     }
     return response;
   } catch {
-    /* Fallback: repassa o request original (com range) para a rede */
     return fetch(request).catch(
       () => new Response('Vídeo indisponível', { status: 503 })
     );
+  }
+}
+
+/* Remove entradas antigas do mesmo vídeo (mesmo pathname, ?v= diferente) */
+async function pruneOldVersions(cache, requestUrl) {
+  const newUrl  = new URL(requestUrl);
+  const newV    = newUrl.searchParams.get('v');
+  const keys    = await cache.keys();
+  for (const key of keys) {
+    const keyUrl = new URL(key.url);
+    if (keyUrl.pathname === newUrl.pathname && keyUrl.searchParams.get('v') !== newV) {
+      cache.delete(key);
+    }
   }
 }
 
@@ -170,9 +184,10 @@ async function sliceResponse(response, rangeHeader) {
   });
 }
 
-/* Remove query string da URL para usar como chave de cache */
-function stripQuery(url) {
+/* Normaliza a URL mantendo apenas o parâmetro ?v= (ignora ?t= e outros cache-busters) */
+function keepVersionParam(url) {
   const u = new URL(url);
-  u.search = '';
+  const v = u.searchParams.get('v');
+  u.search = v ? '?v=' + v : '';
   return u.href;
 }
