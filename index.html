@@ -207,6 +207,16 @@
 
     overlay.addEventListener('click', startPlayback);
 
+    // ── Verificação agressiva de updates nos primeiros 30 segundos ──
+    let aggressiveCheckCount = 0;
+    const aggressiveCheckInterval = setInterval(() => {
+      if (aggressiveCheckCount++ < 3) {
+        checkForUpdates();
+      } else {
+        clearInterval(aggressiveCheckInterval);
+      }
+    }, 5000);
+
     /* ════════════════════════════════════════════════
        Cursor some após inatividade
     ════════════════════════════════════════════════ */
@@ -244,16 +254,29 @@
       const cache = await caches.open(MEDIA_CACHE);
       const key   = cacheKey(config);
 
-      let response = await cache.match(key);
-      if (!response) {
-        response = await fetch(config.videoUrl, { cache: 'no-store' });
+      // Sempre tenta rede primeiro para detectar mudanças
+      try {
+        const response = await Promise.race([
+          fetch(config.videoUrl, { cache: 'no-store' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000))
+        ]);
+        
         if (!response.ok) throw new Error('HTTP ' + response.status);
-        // Armazena no cache para uso offline futuro
+        
+        // Armazena no cache
         await cache.put(key, response.clone());
+        return URL.createObjectURL(await response.blob());
+      } catch {
+        // Se falhar na rede, tenta cache
+        const cached = await cache.match(key);
+        if (cached) {
+          const blob = await cached.blob();
+          return URL.createObjectURL(blob);
+        }
+        
+        // Se não tem cache, relança erro
+        throw new Error('Video not available offline');
       }
-
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
     }
 
     /** Remove a entrada de um config do cache de mídia */
@@ -318,7 +341,20 @@
 
     async function loadInitial() {
       try {
-        const config = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+        // Detecta se é reset forçado
+        const urlParams = new URLSearchParams(window.location.search);
+        const forceReset = urlParams.has('reset');
+        
+        if (forceReset) {
+          // Limpa TODOS os caches para forçar sincronização
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+          
+          // Remove do histórico o parâmetro reset
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        const config = await fetchJson(CONFIG_URL + '?t=' + Date.now() + '&r=' + Math.random());
         document.title = (config.clientName || 'TV') + ' Ads';
 
         const blobUrl = await fetchVideoBlob(config);
@@ -329,7 +365,7 @@
       } catch {
         // Tenta config salvo pelo SW
         try {
-          const swCache = await caches.open('tv-ads-app-v1');
+          const swCache = await caches.open('tv-ads-app-v2');
           const cached  = await swCache.match('./config.json');
           if (cached) {
             const config  = await cached.json();
@@ -357,12 +393,16 @@
 
     async function checkForUpdates() {
       try {
-        const fresh = await fetchJson(CONFIG_URL + '?t=' + Date.now());
+        // Cache buster agressivo: usa timestamp + random
+        const fresh = await fetchJson(CONFIG_URL + '?t=' + Date.now() + '&r=' + Math.random());
 
         // Sem mudança
         if (currentConfig
           && fresh.version  === currentConfig.version
-          && fresh.videoUrl === currentConfig.videoUrl) return;
+          && fresh.videoUrl === currentConfig.videoUrl) {
+          // Versão está igual, mas força re-check em breve (para TVs com clock dessincronizado)
+          return;
+        }
 
         // Já baixando esta versão
         if (pendingConfig
@@ -373,19 +413,28 @@
         pendingConfig  = fresh;
         pendingBlobUrl = null;
 
-        const blobUrl = await fetchVideoBlob(fresh);
+        try {
+          const blobUrl = await fetchVideoBlob(fresh);
 
-        // Confirma que ainda é a versão mais recente (pode ter mudado durante o download)
-        if (pendingConfig
-          && fresh.version  === pendingConfig.version
-          && fresh.videoUrl === pendingConfig.videoUrl) {
-          pendingBlobUrl = blobUrl;
-          badge.classList.add('show');   // avisa discretamente
-        } else {
-          URL.revokeObjectURL(blobUrl);  // versão obsoleta, descarta
+          // Confirma que ainda é a versão mais recente (pode ter mudado durante o download)
+          if (pendingConfig
+            && fresh.version  === pendingConfig.version
+            && fresh.videoUrl === pendingConfig.videoUrl) {
+            pendingBlobUrl = blobUrl;
+            badge.classList.add('show');   // avisa discretamente
+          } else {
+            URL.revokeObjectURL(blobUrl);  // versão obsoleta, descarta
+          }
+        } catch (err) {
+          // Erro ao baixar: reseta pending e tenta novamente mais tarde
+          pendingConfig = null;
+          pendingBlobUrl = null;
         }
 
-      } catch {}
+      } catch (err) {
+        // Erro na requisição do config: pode estar offline
+        // Não faz nada, tentará novamente na próxima verificação
+      }
     }
 
     /* ════════════════════════════════════════════════
@@ -404,9 +453,23 @@
     });
     document.getElementById('reloadBtn').addEventListener('click', () => location.reload());
 
-    window.addEventListener('online', checkForUpdates);
+    window.addEventListener('online', () => {
+      // Quando a conexão volta, força verificação imediata
+      checkForUpdates();
+    });
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) checkForUpdates();
+      if (!document.hidden) {
+        // Quando a aba fica visível, verifica updates
+        checkForUpdates();
+      }
+    });
+
+    // ── Suporte a reset remoto via query parameter ──
+    // Use: ?reset para limpar cache e forçar sincronização
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.action === 'reset') {
+        window.location.href = window.location.pathname + '?reset=1';
+      }
     });
 
     /* ════════════════════════════════════════════════

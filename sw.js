@@ -9,7 +9,8 @@
    (HTML, config, manifest, poster, sw.js).
 ═══════════════════════════════════════════════════════════ */
 
-const APP_CACHE = 'tv-ads-app-v1';
+const APP_CACHE = 'tv-ads-app-v2';
+const MEDIA_CACHE = 'tv-ads-media-v1';
 const APP_FILES = [
   './',
   './index.html',
@@ -34,12 +35,28 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(k => k !== APP_CACHE && k !== 'tv-ads-media-v1')
+          .filter(k => k !== APP_CACHE && k !== MEDIA_CACHE)
           .map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
+      .then(() => cleanOldMediaCache())
   );
 });
+
+/* ── Limpeza de cache de mídia obsoleta periodicamente ── */
+async function cleanOldMediaCache() {
+  try {
+    const cache = await caches.open(MEDIA_CACHE);
+    const keys = await cache.keys();
+    // Mantém apenas as 3 versões mais recentes
+    if (keys.length > 3) {
+      const toDelete = keys.slice(0, keys.length - 3);
+      for (const key of toDelete) {
+        await cache.delete(key);
+      }
+    }
+  } catch {}
+}
 
 /* ── Fetch: apenas assets do app; vídeos passam direto ── */
 self.addEventListener('fetch', event => {
@@ -49,16 +66,26 @@ self.addEventListener('fetch', event => {
 
   // Vídeos: deixa o browser + Cache API da página gerenciarem
   if (/\.(mp4|webm|mov)(\?.*)?$/.test(url.pathname)) return;
+// Sempre tenta buscar da rede com timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
-  // config.json: network-first com fallback para cache
-  if (url.pathname.endsWith('/config.json')) {
-    event.respondWith(networkFirstConfig(event.request));
-    return;
-  }
-
-  // Demais assets: cache-first com fallback para network
-  event.respondWith(cacheFirstAsset(event.request));
-});
+  try {
+    const response = await fetch(request, { 
+      signal: controller.signal,
+      cache: 'no-store' 
+    });
+    clearTimeout(timeout);
+    
+    if (response.ok) {
+      const cache = await caches.open(APP_CACHE);
+      cache.put('./config.json', response.clone());
+    }
+    return response;
+  } catch {
+    clearTimeout(timeout);
+    const cached = await caches.match('./config.json');
+    return cached || new Response('{"version":"offline"
 
 /* ════════════════════════════════════════════════
    Estratégias
