@@ -1,7 +1,7 @@
 {
   "clientName": "Future-Market",
-  "version": "2026-05-28-fix-cache",
-  "videoUrl": "./video.mp4",
+  "version": "2026-05-31-teste",
+  "videoUrl": "./video-atual.mp4",
   "loop": true,
   "playbackRate": 1,
   "refreshMinutes": 5
